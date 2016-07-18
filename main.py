@@ -67,7 +67,7 @@ def unskew(layer, height):
 def conv2d(
     layer,
     num_outputs,
-    kernel_size, # [kernel_height, kernel_width]
+    kernel_shape, # [kernel_height, kernel_width]
     stride, # [column_wise_stride, row_wise_stride]
     mask_type, # None, 'A' or 'B',
     padding='VALID',
@@ -80,37 +80,30 @@ def conv2d(
   with tf.variable_scope(scope):
     num_filters_in = layer.get_shape().as_list()[3]
 
-    kernel_h, kernel_w = kernel_size
-    stride_h, stride_w = stride_size
+    kernel_h, kernel_w = kernel_shape
+    stride_h, stride_w = stride
 
     assert kernel_h % 2 == 1 and kernel_w % 2 == 1, \
       'kernel height and width should be odd number'
 
-    if mask_type == 'A':
-      center_h = kernel_h // 2
-      center_w = kernel_w // 2
+    center_h = kernel_h // 2
+    center_w = kernel_w // 2
 
-      kernel_length = kernel_h * kernel_w
-      default_length = center_h * kernel_w + center_w
-      
-      ws = []
-      for idx in xrange(num_outputs):
-        for jdx in xrange(num_filters_in):
-          if idx <= jdx:
-            length = default_length
-          else:
-            length = default_length + 1
+    mask = np.ones(
+      (kernel_h, kernel_w, num_filters_in, num_outputs), dtype=np.float32)
 
-          w = tf.get_variable('weights', length,
-            tf.float32, weights_initializer, weights_regularizer)
-          ws.append(tf.pad(w, ((0, 0), (0, kernel_length-length))))
+    mask[center_h, center_w+1: ,: ,:] = 0.
+    mask[center_h+1:, :, :, :] = 0.
 
-      weights = tf.pack(ws, axis=1)
-      import ipdb; ipdb.set_trace() 
+    for idx in xrange(num_filters_in):
+      for jdx in xrange(num_outputs):
+        if (idx >= jdx and mask_type == 'A') or (idx > jdx and mask_type == 'B'):
+          mask[center_h, center_w, idx::num_filters_in, jdx::num_outputs] = 0.
 
     weights_shape = [kernel_h, kernel_w, num_filters_in, num_outputs]
     weights = tf.get_variable('weights', weights_shape,
       tf.float32, weights_initializer, weights_regularizer)
+    weights *= mask
     outputs = tf.nn.conv2d(layer, weights, [1, stride_h, stride_w, 1], padding=padding)
 
     if biases_initializer != None:
@@ -125,7 +118,7 @@ def conv2d(
 
 with tf.Session() as sess:
   data_format = 'NHWC'
-  height, width, channel = 4, 3, 1
+  height, width, channel = 40, 30, 3
 
   if data_format == 'NHWC':
     input_shape = [None, height, width, channel]
@@ -135,7 +128,7 @@ with tf.Session() as sess:
     raise ValueError('Unknown data_format: %s' % data_format)
 
   inputs = tf.placeholder(tf.int32, [None, height, width, channel],)
-  skewed_inputs = skewed(inputs)
-  conved_inputs = conv2d(skewed_inputs, 3, [5, 5], [1, 1], 'A', scope='conv')
+  skewed_inputs = skew(inputs)
+  conved_inputs = conv2d(skewed_inputs, 3, [5, 3], [1, 1], 'A', scope='conv')
 
   mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
