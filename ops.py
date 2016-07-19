@@ -3,7 +3,7 @@ logging.basicConfig(format="[%(asctime)s] %(message)s", datefmt="%m-%d %H:%M:%S"
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.ops.rnn_cell import RNNCell
+from tensorflow.python.ops import rnn_cell
 from tensorflow.examples.tutorials.mnist import input_data
 from tensorflow.contrib.layers import variance_scaling_initializer
 
@@ -89,7 +89,6 @@ def conv2d(
       tf.float32, weights_initializer, weights_regularizer)
 
     if mask_type is not None:
-      logger.info("Using mask_type: %s" % mask_type)
       mask = np.ones(
         (kernel_h, kernel_w, channel, num_outputs), dtype=np.float32)
 
@@ -101,18 +100,20 @@ def conv2d(
 
       weights *= tf.constant(mask, dtype=tf.float32)
 
-    outputs = tf.nn.conv2d(inputs, weights, [1, stride_h, stride_w, 1], padding=padding)
+    outputs = tf.nn.conv2d(inputs,
+        weights, [1, stride_h, stride_w, 1], padding=padding, name='outputs')
 
     if biases_initializer != None:
-      biases = tf.get_variable("biases", [num_outputs, ],
-        tf.float32, biases_initializer, biases_regularizer)
-      outputs = tf.nn.bias_add(outputs, biases)
+      biases = tf.get_variable("biases", [num_outputs,],
+          tf.float32, biases_initializer, biases_regularizer)
+      outputs = tf.nn.bias_add(outputs, biases, name='outputs_plus_b')
 
     if activation_fn:
-      outputs = activation_fn(outputs)
+      outputs = activation_fn(outputs, name='outputs_with_fn')
 
-    logger.info('[conv2d] %s : %s %s -> %s %s' \
-        % (scope, inputs.name, inputs.get_shape(), outputs.name, outputs.get_shape()))
+    logger.info('[conv2d_%s] %s : %s %s -> %s %s' \
+        % (mask_type, scope, inputs.name, inputs.get_shape(), outputs.name, outputs.get_shape()))
+
     return outputs
 
 def conv1d(
@@ -128,72 +129,68 @@ def conv1d(
     biases_regularizer=None,
     scope="conv1d"):
   with tf.variable_scope(scope):
-    batch_size, height, width = inputs.get_shape().as_list()
-    import ipdb; ipdb.set_trace() 
+    batch_size, height, _, channel = inputs.get_shape().as_list() # [batch, height, 1, channel]
 
-    kernel_h, kernel_w = kernel_shape
+    kernel_h, kernel_w = kernel_size, 1
     stride_h, stride_w = strides
-
-    row_wise_inputs = tf.reshape(inputs, [-1, 1, width*height, channel])
-
-    assert kernel_h % 2 == 1 and kernel_w % 2 == 1, \
-      "kernel height and width should be odd number"
-
-    center_h = kernel_h // 2
-    center_w = kernel_w // 2
 
     weights_shape = [kernel_h, kernel_w, channel, num_outputs]
     weights = tf.get_variable("weights", weights_shape,
       tf.float32, weights_initializer, weights_regularizer)
 
-    if mask_type is not None:
-      logger.info("Using mask_type: %s" % mask_type)
-      mask = np.ones(
-        (kernel_h, kernel_w, channel, num_outputs), dtype=np.float32)
-
-      mask[center_h, center_w+1: ,: ,:] = 0.
-      mask[center_h+1:, :, :, :] = 0.
-
-      if mask_type == "A":
-        mask[center_h,center_w,:,:] = 0.
-
-      weights *= tf.constant(mask, dtype=tf.float32)
-
-    outputs = tf.nn.conv2d(inputs, weights, [1, stride_h, stride_w, 1], padding=padding)
+    outputs = tf.nn.conv2d(inputs, 
+        weights, [1, stride_h, stride_w, 1], padding=padding, name='outputs')
 
     if biases_initializer != None:
-      biases = tf.get_variable("biases", [num_outputs, ],
-        tf.float32, biases_initializer, biases_regularizer)
-      outputs = tf.nn.bias_add(outputs, biases)
+      biases = tf.get_variable("biases", [num_outputs,],
+          tf.float32, biases_initializer, biases_regularizer)
+      outputs = tf.nn.bias_add(outputs, biases, name='outputs_plus_b')
 
     if activation_fn:
-      outputs = activation_fn(outputs)
-
-    if kernel_h == 1:
-      shape = outputs.get_shape().as_list()
-      outputs = tf.reshape(outputs, [-1, width, height, channel])
+      outputs = activation_fn(outputs, name='outputs_with_fn')
 
     logger.info('[conv1d] %s : %s %s -> %s %s' \
         % (scope, inputs.name, inputs.get_shape(), outputs.name, outputs.get_shape()))
+
     return outputs
 
-def diagonal_bilstm(inputs, hidden_dims):
+def diagonal_bilstm(inputs, hidden_dims, use_dynamic_rnn=False):
   skewed_inputs = skew(inputs, "skewed_i")
-  input_to_state = conv2d(skewed_inputs, 4 * hidden_dims, [1, 1], "B", scope="i_to_s")
-
-  column_wise_inputs = tf.transpose(input_to_state, [2, 0, 1, 3]) # [width, batch, height, channel]
+  column_wise_inputs = tf.transpose(skewed_inputs, [2, 0, 1, 3]) # [width, batch, height, channel]
 
   width, batch, height, channel = get_shape(column_wise_inputs)
-  rnn_inputs = tf.reshape(column_wise_inputs, [width, -1, height * channel])
+  rnn_inputs = tf.reshape(column_wise_inputs, [-1, width, height * channel]) # [batch, max_time, height * channel]
 
-  cell = DiagonalLSTMCell(hidden_dims)
-  outputs, states = tf.nn.dynamic_rnn(cell, inputs=rnn_inputs, dtype=tf.float32)
+  rnn_input_list = [tf.squeeze(rnn_input, squeeze_dims=[1]) 
+      for rnn_input in tf.split(split_dim=1, num_split=width, value=rnn_inputs)]
 
-class DiagonalLSTMCell(RNNCell):
-  def __init__(self, num_units):
-    self._num_units = num_units
-    self._state_size = num_units * 2
-    self._output_size = num_units
+  cell = DiagonalLSTMCell(hidden_dims, height, channel)
+
+  if use_dynamic_rnn:
+    outputs, states = tf.nn.dynamic_rnn(cell,
+        inputs=rnn_inputs, dtype=tf.float32) # [batch, width, height * channel]
+  else:
+    output_list, state_list = tf.nn.rnn(cell,
+        inputs=rnn_input_list, dtype=tf.float32) # width * [batch, channel]
+
+    import ipdb; ipdb.set_trace() 
+    conv_outputs = tf.reshape(tf.transpose(outputs, [])) # [batch, max_time, input_size]
+    conv_states = tf.reshape(states, [])
+
+  print outputs.get_shape()
+  print states.get_shape()
+
+class DiagonalLSTMCell(rnn_cell.RNNCell):
+  def __init__(self, num_units, height, channel):
+    self._num_unit_shards = 1
+    self._forget_bias = 1.
+
+    self._height = height
+    self._channel = channel
+
+    self._num_units = num_units * self._height
+    self._state_size = self._num_units * 2
+    self._output_size = self._num_units
 
   @property
   def state_size(self):
@@ -205,7 +202,7 @@ class DiagonalLSTMCell(RNNCell):
 
   def __call__(self, inputs, state, scope="DiagonalBiLSTMCell"):
     c_prev = tf.slice(state, [0, 0], [-1, self._num_units])
-    m_prev = tf.slice(state, [0, self._num_units], [-1, self._num_units])
+    h_prev = tf.slice(state, [0, self._num_units], [-1, self._num_units])
 
     input_size = inputs.get_shape().with_rank(2)[1]
 
@@ -213,31 +210,29 @@ class DiagonalLSTMCell(RNNCell):
       raise ValueError("Could not infer input size from inputs.get_shape()[-1]")
 
     with tf.variable_scope(scope):
-      states = conv1d(inputs, 4 * self._num_units, 2)
+      # K_is * x_i
+      conv2d_inputs = tf.reshape(inputs, [-1, self._height, 1, self._channel])
+      input_to_state = conv2d(conv2d_inputs, self._num_units * 4, [1, 1], "B", scope="i_to_s")
+      import ipdb; ipdb.set_trace() 
 
-      b = tf.get_variable(
-          "B", shape=[4 * self._num_units],
-          initializer=tf.zeros_initializer, dtype=dtype)
+      # K_ss * h_{i-1}
+      states = conv1d(h_prev, 4 * self._num_units, 2, scope='s_to_s')
 
-      # i = input_gate, j = new_input, f = forget_gate, o = output_gate
-      cell_inputs = tf.concat(1, [inputs, m_prev])
-      lstm_matrix = tf.nn.bias_add(math_ops.matmul(cell_inputs, concat_w), b)
-      i, j, f, o = tf.split(1, 4, lstm_matrix)
+      # i = input_gate, g = new_input, f = forget_gate, o = output_gate
+      cell_inputs = tf.concat(1, [inputs, h_prev])
+      lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, concat_w), b)
+      i, g, f, o = tf.split(1, 4, lstm_matrix)
 
-      c = (sigmoid(f + self._forget_bias) * c_prev + sigmoid(i) *
-            self._activation(j))
+      c = f * c_prev + i * g
+      h = o * tf.tanh(c)
 
-      if self._cell_clip is not None:
-        # pylint: disable=invalid-unary-operand-type
-        c = clip_ops.clip_by_value(c, -self._cell_clip, self._cell_clip)
-        # pylint: enable=invalid-unary-operand-type
+    logger.info('[DiagonalLSTMCell] %s : %s %s -> %s %s' \
+        % (scope, inputs.name, inputs.get_shape(), h.name, h.get_shape()))
 
-      m = sigmoid(o) * self._activation(c)
+    new_state = tf.concat(1, [c, h])
+    return h, new_state
 
-    new_state = tf.concat(1, [c, m])
-    return m, new_state
-
-class RowLSTMCell(RNNCell):
+class RowLSTMCell(rnn_cell.RNNCell):
   def __init__(self, num_units, kernel_shape=[3, 1]):
     self._num_units = num_units
     self._state_size = num_units * 2

@@ -30,7 +30,8 @@ def main(_):
   model = "pixel_rnn" # pixel_rnn, pixel_cnn
 
   with tf.Session() as sess:
-    height, width, channel = 40, 30, 3
+    height, width, channel = 64, 64, 3
+    hidden_dims = 64
 
     if data_format == "NHWC":
       input_shape = [None, height, width, channel]
@@ -39,13 +40,16 @@ def main(_):
     else:
       raise ValueError("Unknown data_format: %s" % data_format)
 
-    inputs = tf.placeholder(tf.int32, [None, height, width, channel],)
-    normalized_inputs = tf.div(tf.to_float(inputs), 255., name="normalized_inputs")
+    l = {}
 
+    l['inputs']= tf.placeholder(tf.int32, [None, height, width, channel],)
+    l['normalized_inputs'] = tf.div(tf.to_float(l['inputs']), 255., name="normalized_inputs")
+    l['conv_inputs'] = conv2d(l['normalized_inputs'], hidden_dims, [7, 7], "A", scope="conv_inputs")
+    
     if model == "pixel_rnn":
-      network = diagonal_bilstm(normalized_inputs, conf.hidden_dims)
+      network = diagonal_bilstm(l['conv_inputs'], conf.hidden_dims)
     elif model == "pixel_cnn":
-      conved_inputs = conv2d(normalized_inputs, 3, [5, 3], [1, 1], "A", scope="conv")
+      conved_inputs = conv2d(l['conv_inputs'], 3, [5, 3], [1, 1], "A", scope="conv")
     else:
       raise ValueError("Wrong model: %s" % model)
 
