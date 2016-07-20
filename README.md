@@ -1,6 +1,16 @@
 # PixelCNN & PixelRNN in TensorFlow
 
-TensorFlow implementation of [Pixel Recurrent Neural Networks](https://arxiv.org/abs/1601.06759).
+TensorFlow implementation of [Pixel Recurrent Neural Networks](https://arxiv.org/abs/1601.06759). This implementation contains:
+
+![model](./assets/model.png)
+
+1. PixelCNN
+  - Masked Convolution (A, B)
+2. PixelRNN
+  - Row LSTM
+  - Diagonal BiLSTM (skew, unskew)
+  - Residual Connections
+  - Multi-Scale PixelRNN
 
 
 ## Requirements
