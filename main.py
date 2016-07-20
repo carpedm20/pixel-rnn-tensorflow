@@ -9,6 +9,7 @@ from tensorflow.contrib.layers import variance_scaling_initializer
 
 from ops import *
 from utils import *
+from statistic import Statistic
 
 flags = tf.app.flags
 
@@ -23,10 +24,12 @@ flags.DEFINE_boolean("use_residual", False, "whether to use residual connections
 flags.DEFINE_boolean("use_dynamic_rnn", False, "whether to use dynamic_rnn or not")
 
 # training
+flags.DEFINE_float("max_step", 100000, "# of step in an epoch")
+flags.DEFINE_float("test_step", 100, "# of step to test a model")
 flags.DEFINE_float("learning_rate", 1e-4, "learning rate")
-flags.DEFINE_float("max_grad", 1, "the maximum of gradient")
-flags.DEFINE_float("min_grad", -1, "the minimum of gradient")
-flags.DEFINE_string("data", "mnist", "the name of dataset")
+flags.DEFINE_float("max_grad", 1, "max of gradient")
+flags.DEFINE_float("min_grad", -1, "min of gradient")
+flags.DEFINE_string("data", "mnist", "name of dataset")
 
 # Debug
 flags.DEFINE_boolean("is_train", True, "training or testing")
@@ -44,6 +47,9 @@ tf.set_random_seed(conf.random_seed)
 np.random.seed(conf.random_seed)
 
 def main(_):
+  model_dir = get_model_dir(conf, ['is_train', 'random_seed', 'log_level'])
+  preprocess_conf(conf)
+
   data_format = "NHWC"
   model = "pixel_rnn" # pixel_rnn, pixel_cnn
 
@@ -107,24 +113,25 @@ def main(_):
 
       new_grads_and_vars = \
           [(tf.clip_by_value(gv[0], conf.min_grad, conf.max_grad), gv[1]) for gv in grads_and_vars]
-
-      step_op = tf.Variable(0, trainable=False)
-      with tf.control_dependencies([step_op.assign_add(1)]):
-        optim = optimizer.apply_gradients(new_grads_and_vars)
+      optim = optimizer.apply_gradients(new_grads_and_vars)
     else:
       raise ValueError("Not implemented yet for RGB colors")
 
     logger.info("Building %s finished!" % model)
 
-    tf.initialize_all_variables().run()
-    start_step = step_op.eval()
+    stat = Statistic(sess, conf.data, model_dir, tf.trainable_variables(), conf.test_step)
 
-    iterator = trange(10000, ncols=70, initial=start_step)
+    tf.initialize_all_variables().run()
+
+    iterator = trange(conf.max_step, ncols=70, initial=stat.get_t())
     for i in iterator:
       images = next_batch(conf.batch_size).reshape([conf.batch_size, height, width, channel])
 
       _, cost = sess.run([optim, loss], feed_dict={l['inputs']: images})
       iterator.set_description("l: %s" % cost)
+      print
+
+      stat.on_step(cost)
 
 if __name__ == "__main__":
   tf.app.run()
