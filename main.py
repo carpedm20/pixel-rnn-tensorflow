@@ -26,7 +26,8 @@ flags.DEFINE_boolean("use_dynamic_rnn", False, "whether to use dynamic_rnn or no
 # training
 flags.DEFINE_float("max_step", 100000, "# of step in an epoch")
 flags.DEFINE_float("test_step", 100, "# of step to test a model")
-flags.DEFINE_float("learning_rate", 1e-4, "learning rate")
+flags.DEFINE_float("save_step", 1000, "# of step to save a model")
+flags.DEFINE_float("learning_rate", 1e-3, "learning rate")
 flags.DEFINE_float("max_grad", 1, "max of gradient")
 flags.DEFINE_float("min_grad", -1, "min of gradient")
 flags.DEFINE_string("data", "mnist", "name of dataset")
@@ -47,7 +48,8 @@ tf.set_random_seed(conf.random_seed)
 np.random.seed(conf.random_seed)
 
 def main(_):
-  model_dir = get_model_dir(conf, ['is_train', 'random_seed', 'log_level'])
+  model_dir = get_model_dir(conf, 
+      ['max_step', 'test_step', 'save_step', 'is_train', 'random_seed', 'log_level'])
   preprocess_conf(conf)
 
   data_format = "NHWC"
@@ -108,7 +110,7 @@ def main(_):
       loss = tf.reduce_mean(
           tf.nn.sigmoid_cross_entropy_with_logits(l['conv2d_out_final'], l['normalized_inputs'], name='loss'))
 
-      optimizer = tf.train.AdagradOptimizer(conf.learning_rate)
+      optimizer = tf.train.RMSPropOptimizer(conf.learning_rate)
       grads_and_vars = optimizer.compute_gradients(loss)
 
       new_grads_and_vars = \
