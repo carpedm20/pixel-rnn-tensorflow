@@ -7,6 +7,9 @@ from tensorflow.python.ops import rnn_cell
 from tensorflow.examples.tutorials.mnist import input_data
 from tensorflow.contrib.layers import variance_scaling_initializer
 
+#WEIGHT_INITIALIZER = tf.contrib.layers.xavier_initializer
+WEIGHT_INITIALIZER = tf.uniform_unit_scaling_initializer
+
 logger = logging.getLogger(__name__)
 
 he_uniform = variance_scaling_initializer(factor=2.0, mode="FAN_IN", uniform=False)
@@ -74,7 +77,7 @@ def conv2d(
     strides=[1, 1], # [column_wise_stride, row_wise_stride]
     padding="SAME",
     activation_fn=tf.nn.relu,
-    weights_initializer=tf.contrib.layers.xavier_initializer(),
+    weights_initializer=WEIGHT_INITIALIZER(),
     weights_regularizer=None,
     biases_initializer=tf.zeros_initializer,
     biases_regularizer=None,
@@ -106,9 +109,11 @@ def conv2d(
         mask[center_h,center_w,:,:] = 0.
 
       weights *= tf.constant(mask, dtype=tf.float32)
+      tf.add_to_collection('conv2d_weights', weights)
 
     outputs = tf.nn.conv2d(inputs,
         weights, [1, stride_h, stride_w, 1], padding=padding, name='outputs')
+    tf.add_to_collection('conv2d_outputs', outputs)
 
     if biases_initializer != None:
       biases = tf.get_variable("biases", [num_outputs,],
@@ -130,7 +135,7 @@ def conv1d(
     strides=[1, 1], # [column_wise_stride, row_wise_stride]
     padding="SAME",
     activation_fn=tf.nn.relu,
-    weights_initializer=tf.contrib.layers.xavier_initializer(),
+    weights_initializer=WEIGHT_INITIALIZER(),
     weights_regularizer=None,
     biases_initializer=tf.zeros_initializer,
     biases_regularizer=None,
@@ -144,9 +149,11 @@ def conv1d(
     weights_shape = [kernel_h, kernel_w, channel, num_outputs]
     weights = tf.get_variable("weights", weights_shape,
       tf.float32, weights_initializer, weights_regularizer)
+    tf.add_to_collection('conv1d_weights', weights)
 
     outputs = tf.nn.conv2d(inputs, 
         weights, [1, stride_h, stride_w, 1], padding=padding, name='outputs')
+    tf.add_to_collection('conv1d_outputs', weights)
 
     if biases_initializer != None:
       biases = tf.get_variable("biases", [num_outputs,],
@@ -169,12 +176,20 @@ def diagonal_bilstm(inputs, conf, scope='diagonal_bilstm'):
     output_state_fw = diagonal_lstm(inputs, conf, scope='output_state_fw')
     output_state_bw = reverse(diagonal_lstm(reverse(inputs), conf, scope='output_state_bw'))
 
+    tf.add_to_collection('output_state_fw', output_state_fw)
+    tf.add_to_collection('output_state_bw', output_state_bw)
+
     if conf.use_residual:
       residual_state_fw = conv2d(output_state_fw, conf.hidden_dims * 2, [1, 1], "B", scope="residual_fw")
       output_state_fw = residual_state_fw + inputs
 
       residual_state_bw = conv2d(output_state_bw, conf.hidden_dims * 2, [1, 1], "B", scope="residual_bw")
       output_state_bw = residual_state_bw + inputs
+
+      tf.add_to_collection('residual_state_fw', residual_state_fw)
+      tf.add_to_collection('residual_state_bw', residual_state_bw)
+      tf.add_to_collection('residual_output_state_fw', output_state_fw)
+      tf.add_to_collection('residual_output_state_bw', output_state_bw)
 
     batch, height, width, channel = get_shape(output_state_bw)
 
@@ -184,16 +199,24 @@ def diagonal_bilstm(inputs, conf, scope='diagonal_bilstm'):
 
     output_state_bw_with_last_zeros = tf.concat(1, [output_state_bw_except_last, dummy_zeros])
 
+    tf.add_to_collection('output_state_bw_with_last_zeros', output_state_bw_with_last_zeros)
+
     return output_state_fw + output_state_bw_with_last_zeros
 
 def diagonal_lstm(inputs, conf, scope='diagonal_lstm'):
   with tf.variable_scope(scope):
+    tf.add_to_collection('lstm_inputs', inputs)
+
     skewed_inputs = skew(inputs, scope="skewed_i")
+    tf.add_to_collection('skewed_lstm_inputs', skewed_inputs)
 
     # input-to-state (K_is * x_i) : 1x1 convolution. generate 4h x n x n tensor.
     input_to_state = conv2d(skewed_inputs, conf.hidden_dims * 4, [1, 1], "B", scope="i_to_s")
     column_wise_inputs = tf.transpose(
-        input_to_state, [2, 0, 1, 3]) # [width, batch, height, hidden_dims * 4]
+        input_to_state, [0, 2, 1, 3]) # [batch, width, height, hidden_dims * 4]
+
+    tf.add_to_collection('skewed_conv_inputs', input_to_state)
+    tf.add_to_collection('column_wise_inputs', column_wise_inputs)
 
     if conf.log_level == 'DEBUG':
       logger.warning("[assert] check equal of skew and unskew")
@@ -202,9 +225,11 @@ def diagonal_lstm(inputs, conf, scope='diagonal_lstm'):
       skew_assert_op = tf.Assert(tf.equal(inputs, unskewed_inputs, 'skew_check'), [unskewed_inputs])
       input_to_state = tf.with_dependencies([skew_assert_op], input_to_state)
 
-    width, batch, height, channel = get_shape(column_wise_inputs)
+    batch, width, height, channel = get_shape(column_wise_inputs)
     rnn_inputs = tf.reshape(column_wise_inputs,
         [-1, width, height * channel]) # [batch, max_time, height * hidden_dims * 4]
+
+    tf.add_to_collection('rnn_inputs', rnn_inputs)
 
     rnn_input_list = [tf.squeeze(rnn_input, squeeze_dims=[1]) 
         for rnn_input in tf.split(split_dim=1, num_split=width, value=rnn_inputs)]
@@ -223,7 +248,10 @@ def diagonal_lstm(inputs, conf, scope='diagonal_lstm'):
           [-1, width, height, conf.hidden_dims]) # [batch, width, height, hidden_dims]
 
       skewed_outputs = tf.transpose(width_first_outputs, [0, 2, 1, 3])
+      tf.add_to_collection('skewed_outputs', skewed_outputs)
+
       outputs = unskew(skewed_outputs)
+      tf.add_to_collection('unskewed_outputs', outputs)
 
     return outputs
 
@@ -263,10 +291,16 @@ class DiagonalLSTMCell(rnn_cell.RNNCell):
       conv1d_inputs = tf.reshape(h_prev,
           [-1, self._height, 1, self._hidden_dims], name='conv1d_inputs') # [batch, height, 1, hidden_dims]
 
+      tf.add_to_collection('i_to_s', i_to_s)
+      tf.add_to_collection('conv1d_inputs', conv1d_inputs)
+
       conv_s_to_s = conv1d(conv1d_inputs,
           4 * self._hidden_dims, 2, scope='s_to_s') # [batch, height, 1, hidden_dims * 4]
       s_to_s = tf.reshape(conv_s_to_s,
           [-1, self._height * self._hidden_dims * 4]) # [batch, height * hidden_dims * 4]
+
+      tf.add_to_collection('conv_s_to_s', conv_s_to_s)
+      tf.add_to_collection('s_to_s', s_to_s)
 
       lstm_matrix = tf.sigmoid(s_to_s + i_to_s)
 
