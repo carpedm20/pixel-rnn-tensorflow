@@ -5,8 +5,6 @@ logging.basicConfig(format="[%(asctime)s] %(message)s", datefmt="%m-%d %H:%M:%S"
 import numpy as np
 from tqdm import trange
 import tensorflow as tf
-from tensorflow.examples.tutorials.mnist import input_data
-from tensorflow.models.image.cifar10 import cifar10_input
 
 from ops import *
 from utils import *
@@ -33,7 +31,7 @@ flags.DEFINE_float("grad_clip", 1, "value of gradient to be used for clipping")
 flags.DEFINE_boolean("use_gpu", True, "whether to use gpu for training")
 
 # data
-flags.DEFINE_string("data", "mnist", "name of dataset [mnist, cifar10]")
+flags.DEFINE_string("data", "mnist", "name of dataset [mnist, cifar]")
 flags.DEFINE_string("data_dir", "data", "name of data directory")
 flags.DEFINE_string("sample_dir", "sample", "name of sample directory")
 
@@ -69,13 +67,20 @@ def main(_):
     data_format = "NCHW"
 
   if conf.data == "mnist":
+    from tensorflow.examples.tutorials.mnist import input_data
+
     mnist = input_data.read_data_sets(DATA_DIR, one_hot=True)
     next_batch = lambda x: mnist.train.next_batch(x)[0]
 
     height, width, channel = 28, 28, 1
-  elif conf.data == "cifar10":
+  elif conf.data == "cifar":
+    from cifar10 import IMAGE_SIZE, inputs
+
+    images, labels = inputs(eval_data=False, data_dir=DATA_DIR, batch_size=conf.batch_size)
+
+    height, width, channel = IMAGE_SIZE, IMAGE_SIZE, 3
+
     import ipdb; ipdb.set_trace() 
-    height, width, channel = cifar10_input.IMAGE_SIZE
 
   with tf.Session() as sess:
     logger.info("Building %s starts!" % conf.model)

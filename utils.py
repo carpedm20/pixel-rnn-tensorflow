@@ -1,4 +1,9 @@
+import logging
+logging.basicConfig(format="[%(asctime)s] %(message)s", datefmt="%m-%d %H:%M:%S")
+
 import os
+import sys
+import urllib
 import pprint
 import tensorflow as tf
 
@@ -9,6 +14,7 @@ import numpy as np
 import scipy.misc
 
 pp = pprint.PrettyPrinter().pprint
+logger = logging.getLogger(__name__)
 
 def mprint(matrix, pivot=0.5):
   for array in matrix:
@@ -83,7 +89,7 @@ def maybe_download_and_extract(dest_directory):
       sys.stdout.write('\r>> Downloading %s %.1f%%' % (filename,
           float(count * block_size) / float(total_size) * 100.0))
       sys.stdout.flush()
-    filepath, _ = urllib.request.urlretrieve(DATA_URL, filepath, _progress)
+    filepath, _ = urllib.urlretrieve(DATA_URL, filepath, _progress)
     print()
     statinfo = os.stat(filepath)
     print('Successfully downloaded', filename, statinfo.st_size, 'bytes.')
