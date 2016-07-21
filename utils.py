@@ -30,12 +30,12 @@ def get_timestamp():
 def binarize(images):
   return (np.random.uniform(size=images.shape) < images).astype('float32')
 
-def save_images(images, height, width, n_row, n_col, cmin=0.0, cmax=1.0):
+def save_images(images, height, width, n_row, n_col, cmin=0.0, cmax=1.0, filename="sample.jpg"):
   images = images.reshape((height, width, n_row, n_col))
   images = images.transpose(1, 2, 0, 3)
   images = images.reshape((height * n_row, width * n_col))
 
-  scipy.misc.toimage(images, cmin=cmin, cmax=cmax).save('sample_%s.jpg' % get_timestamp())
+  scipy.misc.toimage(images, cmin=cmin, cmax=cmax).save(filename)
 
 def get_model_dir(config, exceptions=None):
   attrs = config.__dict__['__flags']
@@ -59,3 +59,32 @@ def preprocess_conf(conf):
 
   for option, value in options.items():
     option = option.lower()
+
+def check_and_create_dir(directory):
+  if not os.path.exists(directory):
+    logger.info('Creating directory: %s' % directory)
+    os.makedirs(directory)
+  else:
+    logger.info('Skip creating directory: %s' % directory)
+
+def maybe_download_and_extract(dest_directory):
+  """
+  Download and extract the tarball from Alex's website.
+  From https://github.com/tensorflow/tensorflow/blob/r0.9/tensorflow/models/image/cifar10/cifar10.py
+  """
+  DATA_URL = 'http://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz'
+
+  if not os.path.exists(dest_directory):
+    os.makedirs(dest_directory)
+  filename = DATA_URL.split('/')[-1]
+  filepath = os.path.join(dest_directory, filename)
+  if not os.path.exists(filepath):
+    def _progress(count, block_size, total_size):
+      sys.stdout.write('\r>> Downloading %s %.1f%%' % (filename,
+          float(count * block_size) / float(total_size) * 100.0))
+      sys.stdout.flush()
+    filepath, _ = urllib.request.urlretrieve(DATA_URL, filepath, _progress)
+    print()
+    statinfo = os.stat(filepath)
+    print('Successfully downloaded', filename, statinfo.st_size, 'bytes.')
+    tarfile.open(filepath, 'r:gz').extractall(dest_directory)

@@ -1,3 +1,4 @@
+import os
 import logging
 logging.basicConfig(format="[%(asctime)s] %(message)s", datefmt="%m-%d %H:%M:%S")
 
@@ -5,6 +6,7 @@ import numpy as np
 from tqdm import trange
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
+from tensorflow.models.image.cifar10 import cifar10_input
 
 from ops import *
 from utils import *
@@ -28,8 +30,12 @@ flags.DEFINE_float("test_step", 100, "# of step to test a model")
 flags.DEFINE_float("save_step", 1000, "# of step to save a model")
 flags.DEFINE_float("learning_rate", 1e-3, "learning rate")
 flags.DEFINE_float("grad_clip", 1, "value of gradient to be used for clipping")
-flags.DEFINE_string("data", "mnist", "name of dataset")
-flags.DEFINE_boolean("use_gpu", True, "whther to use gpu for training")
+flags.DEFINE_boolean("use_gpu", True, "whether to use gpu for training")
+
+# data
+flags.DEFINE_string("data", "mnist", "name of dataset [mnist, cifar10]")
+flags.DEFINE_string("data_dir", "data", "name of data directory")
+flags.DEFINE_string("sample_dir", "sample", "name of sample directory")
 
 # Debug
 flags.DEFINE_boolean("is_train", True, "training or testing")
@@ -46,6 +52,12 @@ logger.setLevel(conf.log_level)
 tf.set_random_seed(conf.random_seed)
 np.random.seed(conf.random_seed)
 
+DATA_DIR = os.path.join(conf.data_dir, conf.data)
+SAMPLE_DIR = os.path.join(conf.data_dir, conf.data)
+
+check_and_create_dir(DATA_DIR)
+check_and_create_dir(SAMPLE_DIR)
+
 def main(_):
   model_dir = get_model_dir(conf, 
       ['max_step', 'test_step', 'save_step', 'is_train', 'random_seed', 'log_level'])
@@ -57,10 +69,13 @@ def main(_):
     data_format = "NCHW"
 
   if conf.data == "mnist":
-    mnist = input_data.read_data_sets("MNIST_data", one_hot=True)
+    mnist = input_data.read_data_sets(DATA_DIR, one_hot=True)
     next_batch = lambda x: mnist.train.next_batch(x)[0]
 
     height, width, channel = 28, 28, 1
+  elif conf.data == "cifar10":
+    import ipdb; ipdb.set_trace() 
+    height, width, channel = cifar10_input.IMAGE_SIZE
 
   with tf.Session() as sess:
     logger.info("Building %s starts!" % conf.model)
@@ -173,7 +188,8 @@ def main(_):
             if conf.data == 'mnist':
               mprint(binarize(samples[0,:,:,:]))
 
-      save_images(samples, height, width, 10, 10)
+      save_images(samples, height, width, 10, 10, \
+          os.path.join(SAMPLE_DIR, "%s.jpg" % get_timestamp()))
 
 
 if __name__ == "__main__":
