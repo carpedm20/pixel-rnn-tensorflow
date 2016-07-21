@@ -5,7 +5,6 @@ import numpy as np
 from tqdm import trange
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
-from tensorflow.contrib.layers import variance_scaling_initializer
 
 from ops import *
 from utils import *
@@ -14,7 +13,7 @@ from statistic import Statistic
 flags = tf.app.flags
 
 # network
-flags.DEFINE_string("model", "pixel_rnn", "name of model [pixel_rnn, pixel_cnn]")
+flags.DEFINE_string("model", "pixel_cnn", "name of model [pixel_rnn, pixel_cnn]")
 flags.DEFINE_integer("batch_size", 100, "size of a batch")
 flags.DEFINE_integer("hidden_dims", 64, "dimesion of hidden states of LSTM or Conv layers")
 flags.DEFINE_integer("recurrent_length", 2, "the length of LSTM or Conv layers")
@@ -30,6 +29,7 @@ flags.DEFINE_float("save_step", 1000, "# of step to save a model")
 flags.DEFINE_float("learning_rate", 1e-3, "learning rate")
 flags.DEFINE_float("grad_clip", 1, "value of gradient to be used for clipping")
 flags.DEFINE_string("data", "mnist", "name of dataset")
+flags.DEFINE_boolean("use_gpu", True, "whther to use gpu for training")
 
 # Debug
 flags.DEFINE_boolean("is_train", True, "training or testing")
@@ -51,8 +51,10 @@ def main(_):
       ['max_step', 'test_step', 'save_step', 'is_train', 'random_seed', 'log_level'])
   preprocess_conf(conf)
 
-  data_format = "NHWC"
-  model = "pixel_rnn" # pixel_rnn, pixel_cnn
+  if conf.use_gpu:
+    data_format = "NHWC"
+  else:
+    data_format = "NCHW"
 
   if conf.data == "mnist":
     mnist = input_data.read_data_sets("MNIST_data", one_hot=True)
@@ -61,7 +63,7 @@ def main(_):
     height, width, channel = 28, 28, 1
 
   with tf.Session() as sess:
-    logger.info("Building %s starts!" % model)
+    logger.info("Building %s starts!" % conf.model)
 
     if data_format == "NHWC":
       input_shape = [None, height, width, channel]
@@ -83,7 +85,7 @@ def main(_):
     scope = "conv_inputs"
     logger.info("Building %s" % scope)
 
-    if conf.use_residual and model == "pixel_rnn":
+    if conf.use_residual and conf.model == "pixel_rnn":
       l[scope] = conv2d(l['normalized_inputs'], conf.hidden_dims * 2, [7, 7], "A", scope=scope)
     else:
       l[scope] = conv2d(l['normalized_inputs'], conf.hidden_dims, [7, 7], "A", scope=scope)
@@ -91,22 +93,24 @@ def main(_):
     # main reccurent layers
     l_hid = l[scope]
     for idx in xrange(conf.recurrent_length):
-      if model == "pixel_rnn":
+      if conf.model == "pixel_rnn":
         scope = 'LSTM%d' % idx
         l[scope] = l_hid = diagonal_bilstm(l_hid, conf, scope=scope)
-      elif model == "pixel_cnn":
+      elif conf.model == "pixel_cnn":
         scope = 'CONV%d' % idx
         l[scope] = l_hid = conv2d(l_hid, 3, [1, 1], "B", scope=scope)
+      else:
+        raise ValueError("wrong type of model: %s" % (conf.model))
       logger.info("Building %s" % scope)
 
     # output reccurent layers
     for idx in xrange(conf.out_recurrent_length):
       scope = 'CONV_OUT%d' % idx
-      l[scope] = l_hid = tf.nn.relu(conv2d(l_hid, conf.out_hidden_dims, [1, 1], 'B', scope=scope))
+      l[scope] = l_hid = tf.nn.relu(conv2d(l_hid, conf.out_hidden_dims, [1, 1], "B", scope=scope))
       logger.info("Building %s" % scope)
 
     if channel == 1:
-      l['conv2d_out_logits'] = conv2d(l_hid, 1, [1, 1], 'B', scope='conv2d_out_logits')
+      l['conv2d_out_logits'] = conv2d(l_hid, 1, [1, 1], "B", scope='conv2d_out_logits')
       l['output'] = tf.nn.sigmoid(l['conv2d_out_logits'])
 
       logger.info("Building loss and optims")
@@ -122,36 +126,53 @@ def main(_):
     else:
       raise ValueError("Not implemented yet for RGB colors")
 
-    logger.info("Building %s finished!" % model)
-    show_all_variables()
+    logger.info("Building %s finished!" % conf.model)
 
-    #stat = Statistic(sess, conf.data, model_dir, tf.trainable_variables(), conf.test_step)
-    stat = None
-    initial_step = stat.get_t() if stat else 0
+    show_all_variables()
+    stat = Statistic(sess, conf.data, model_dir, tf.trainable_variables(), conf.test_step)
 
     logger.info("Initializing all variables")
+
     tf.initialize_all_variables().run()
 
-    logger.info("Training starts!")
+    if conf.is_train:
+      logger.info("Training starts!")
 
-    def binarize(images):
-      return (np.random.uniform(size=images.shape) < images).astype('float32')
+      initial_step = stat.get_t() if stat else 0
+      iterator = trange(conf.max_step, ncols=70, initial=initial_step)
 
-    iterator = trange(conf.max_step, ncols=70, initial=initial_step)
-    for i in iterator:
-      images = binarize(next_batch(conf.batch_size)) \
-          .reshape([conf.batch_size, height, width, channel])
-      _, cost, output = sess.run([
-          optim, loss, l['output']
-        ], feed_dict={l['inputs']: images})
+      for i in iterator:
+        if conf.data == 'mnist':
+          images = binarize(next_batch(conf.batch_size)) \
+            .reshape([conf.batch_size, height, width, channel])
 
-      print
-      print mprint(images[1])
-      print mprint(output[1], 0.5)
+        _, cost, output = sess.run([
+            optim, loss, l['output']
+          ], feed_dict={l['inputs']: images})
 
-      if stat:
-        stat.on_step(cost)
-      iterator.set_description("l: %s" % cost)
+        if conf.data == 'mnist':
+          print
+          print mprint(images[1])
+          print mprint(output[1], 0.5)
+
+        if stat:
+          stat.on_step(cost)
+
+        iterator.set_description("l: %s" % cost)
+    else:
+      logger.info("Image generation starts!")
+      stat.load_model()
+
+      samples = np.zeros((100, height, width, 1), dtype='float32')
+
+      for i in xrange(height):
+        for j in xrange(width):
+          for k in xrange(channel):
+            next_sample = binarize(l['output'].eval({l['inputs']: samples}))
+            samples[:, i, j, k] = next_sample[:, i, j, k]
+
+      save_images(samples, height, width, 10, 10)
+
 
 if __name__ == "__main__":
   tf.app.run()
