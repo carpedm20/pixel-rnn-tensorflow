@@ -102,25 +102,23 @@ def main(_):
     # output reccurent layers
     for idx in xrange(conf.out_recurrent_length):
       scope = 'CONV_OUT%d' % idx
-      l[scope] = l_hid = tf.nn.relu(conv2d(l_hid, conf.out_hidden_dims, [1, 1], None, scope=scope))
+      l[scope] = l_hid = tf.nn.relu(conv2d(l_hid, conf.out_hidden_dims, [1, 1], 'B', scope=scope))
       logger.info("Building %s" % scope)
 
     if channel == 1:
-      l['conv2d_out_final'] = conv2d(l_hid, 1, [1, 1], None, scope='conv2d_out_final')
-      l['output'] = tf.nn.sigmoid(l['conv2d_out_final'])
+      l['conv2d_out_logits'] = conv2d(l_hid, 1, [1, 1], 'B', scope='conv2d_out_logits')
+      l['output'] = tf.nn.sigmoid(l['conv2d_out_logits'])
 
       logger.info("Building loss and optims")
       loss = tf.reduce_mean(
-          tf.nn.sigmoid_cross_entropy_with_logits(l['conv2d_out_final'], l['normalized_inputs'], name='loss'))
+          tf.nn.sigmoid_cross_entropy_with_logits(l['conv2d_out_logits'], l['normalized_inputs'], name='loss'))
 
       optimizer = tf.train.RMSPropOptimizer(conf.learning_rate)
-      #optimizer = tf.train.AdamOptimizer(conf.learning_rate)
       grads_and_vars = optimizer.compute_gradients(loss)
 
       new_grads_and_vars = \
           [(tf.clip_by_value(gv[0], -conf.grad_clip, conf.grad_clip), gv[1]) for gv in grads_and_vars]
       optim = optimizer.apply_gradients(new_grads_and_vars)
-      #optim = optimizer.minimize(loss)
     else:
       raise ValueError("Not implemented yet for RGB colors")
 
@@ -139,53 +137,17 @@ def main(_):
     def binarize(images):
       return (np.random.uniform(size=images.shape) < images).astype('float32')
 
-    G = tf.get_default_graph()
-
     iterator = trange(conf.max_step, ncols=70, initial=initial_step)
     for i in iterator:
-      #images = binarize(next_batch(conf.batch_size)).reshape([conf.batch_size, height, width, channel])
-      images = np.ones([100, 28, 28, 1])
-      images[:,10:20,:,:]=0
-      _, cost, output, output_final = sess.run([optim, loss, l['output'], l['conv2d_out_final']], feed_dict={l['inputs']: images})
+      images = binarize(next_batch(conf.batch_size)) \
+          .reshape([conf.batch_size, height, width, channel])
+      _, cost, output = sess.run([
+          optim, loss, l['output']
+        ], feed_dict={l['inputs']: images})
+
       print
       print mprint(images[1])
       print mprint(output[1], 0.5)
-      print mprint(output_final[1], 0.5)
-
-      #cost, out1, out2, conv = sess.run(
-      #    [loss, l['output'], l['conv2d_out_final'], l['conv_inputs']], feed_dict={l['inputs']: images})
-      #print
-      #print out1[0][10][:9].tolist()
-      #print out2[0][10][:9].tolist()
-      #print images[0][10][:9].tolist()
-      #print conv[0][10][:9,3].tolist()
-      #print out1[0].max(), out1[0].min(), out2[0].max(), out2[0].min()
-
-      #_, cost, out1, out2, conv = sess.run(
-      #    [optim, loss, l['output'], l['conv2d_out_final'], l['conv_inputs']], feed_dict={l['inputs']: images})
-      #print
-      #print out1[0][10][:9].tolist()
-      #print out2[0][10][:9].tolist()
-      #print images[0][10][:9].tolist()
-      #print conv[0][10][:9,3].tolist()
-      #print out1[0].max(), out1[0].min(), out2[0].max(), out2[0].min()
-      #import ipdb; ipdb.set_trace() 
-
-      # G.get_collection('conv2d_weights')[0].eval()[:,:,0,0]
-
-      # tf.get_collection('lstm_inputs')[0].eval({l['inputs']: images})[0,:,:,0]
-      # mprint(tf.get_collection('lstm_inputs')[0].eval({l['inputs']: images})[1,:,:,0], 0.0007746)
-      # mprint(tf.get_collection('skewed_lstm_inputs')[0].eval({l['inputs']: images})[1,:,:,0], 0.0007746)
-      # tf.get_collection('skewed_conv_inputs')[0].eval({l['inputs']: images})[1,:,:,0]
-      # mprint(tf.get_collection('skewed_conv_inputs')[0].eval({l['inputs']: images})[1,:,:,0], 0)
-
-      # mprint(G.get_collection('column_wise_inputs')[0].eval({l['inputs']: images})[1,:,:,0], 0)
-      # mprint(G.get_collection('rnn_inputs')[0].eval({l['inputs']: images})[1,:,::4*64],0)
-      # for i in xrange(55): mprint([tf.get_collection('i_to_s')[i].eval({l['inputs']: images})[1,::4*64]], 0)
-
-      # tf.get_collection('conv2d_outputs')[0].eval({l['inputs']: images})
-      # mprint(tf.get_collection('conv2d_outputs')[0].eval({l['inputs']: images})[1,:,:,1], 0)
-      # mprint(tf.get_collection('output_state_fw')[0].eval({l['inputs']: images})[1,:,:,-1], 0.3)
 
       if stat:
         stat.on_step(cost)

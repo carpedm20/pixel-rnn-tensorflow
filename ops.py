@@ -7,8 +7,8 @@ from tensorflow.python.ops import rnn_cell
 from tensorflow.examples.tutorials.mnist import input_data
 from tensorflow.contrib.layers import variance_scaling_initializer
 
-#WEIGHT_INITIALIZER = tf.contrib.layers.xavier_initializer
-WEIGHT_INITIALIZER = tf.uniform_unit_scaling_initializer
+WEIGHT_INITIALIZER = tf.contrib.layers.xavier_initializer()
+#WEIGHT_INITIALIZER = tf.uniform_unit_scaling_initializer()
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +76,8 @@ def conv2d(
     mask_type, # None, "A" or "B",
     strides=[1, 1], # [column_wise_stride, row_wise_stride]
     padding="SAME",
-    activation_fn=tf.nn.relu,
-    weights_initializer=WEIGHT_INITIALIZER(),
+    activation_fn=None,
+    weights_initializer=WEIGHT_INITIALIZER,
     weights_regularizer=None,
     biases_initializer=tf.zeros_initializer,
     biases_regularizer=None,
@@ -105,7 +105,7 @@ def conv2d(
       mask[center_h, center_w+1: ,: ,:] = 0.
       mask[center_h+1:, :, :, :] = 0.
 
-      if mask_type == "A":
+      if mask_type.upper() == "A":
         mask[center_h,center_w,:,:] = 0.
 
       weights *= tf.constant(mask, dtype=tf.float32)
@@ -134,8 +134,8 @@ def conv1d(
     kernel_size,
     strides=[1, 1], # [column_wise_stride, row_wise_stride]
     padding="SAME",
-    activation_fn=tf.nn.relu,
-    weights_initializer=WEIGHT_INITIALIZER(),
+    activation_fn=None,
+    weights_initializer=WEIGHT_INITIALIZER,
     weights_regularizer=None,
     biases_initializer=tf.zeros_initializer,
     biases_regularizer=None,
@@ -217,13 +217,6 @@ def diagonal_lstm(inputs, conf, scope='diagonal_lstm'):
 
     tf.add_to_collection('skewed_conv_inputs', input_to_state)
     tf.add_to_collection('column_wise_inputs', column_wise_inputs)
-
-    if conf.log_level == 'DEBUG':
-      logger.warning("[assert] check equal of skew and unskew")
-
-      unskewed_inputs = unskew(skewed_inputs, scope="skewed_i")
-      skew_assert_op = tf.Assert(tf.equal(inputs, unskewed_inputs, 'skew_check'), [unskewed_inputs])
-      input_to_state = tf.with_dependencies([skew_assert_op], input_to_state)
 
     batch, width, height, channel = get_shape(column_wise_inputs)
     rnn_inputs = tf.reshape(column_wise_inputs,
