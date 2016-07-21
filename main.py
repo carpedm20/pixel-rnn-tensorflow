@@ -134,6 +134,7 @@ def main(_):
     logger.info("Initializing all variables")
 
     tf.initialize_all_variables().run()
+    stat.load_model()
 
     if conf.is_train:
       logger.info("Training starts!")
@@ -161,8 +162,6 @@ def main(_):
         iterator.set_description("l: %s" % cost)
     else:
       logger.info("Image generation starts!")
-      stat.load_model()
-
       samples = np.zeros((100, height, width, 1), dtype='float32')
 
       for i in xrange(height):
@@ -170,6 +169,9 @@ def main(_):
           for k in xrange(channel):
             next_sample = binarize(l['output'].eval({l['inputs']: samples}))
             samples[:, i, j, k] = next_sample[:, i, j, k]
+
+            if conf.data == 'mnist':
+              mprint(binarize(samples[0,:,:,:]))
 
       save_images(samples, height, width, 10, 10)
 
