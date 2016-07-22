@@ -10,6 +10,8 @@ TensorFlow implementation of [Pixel Recurrent Neural Networks](https://arxiv.org
   - Diagonal BiLSTM (skew, unskew)
   - Residual Connections
 
+*Model for natural images (with RGB colors) is in progress*
+
 
 ## Requirements
 
