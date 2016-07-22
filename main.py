@@ -78,7 +78,9 @@ def main(_):
   elif conf.data == "cifar":
     from cifar10 import IMAGE_SIZE, inputs
 
-    images, labels = inputs(eval_data=False, data_dir=DATA_DIR, batch_size=conf.batch_size)
+    maybe_download_and_extract(DATA_DIR)
+    images, labels = inputs(eval_data=False, 
+        data_dir=os.path.join(DATA_DIR, 'cifar-10-batches-bin'), batch_size=conf.batch_size)
 
     height, width, channel = IMAGE_SIZE, IMAGE_SIZE, 3
 

@@ -68,17 +68,43 @@ class Network:
       self.l['output'] = tf.nn.sigmoid(self.l['conv2d_out_logits'])
 
       logger.info("Building loss and optims")
-      self.loss = tf.reduce_mean(
-          tf.nn.sigmoid_cross_entropy_with_logits(self.l['conv2d_out_logits'], self.l['normalized_inputs'], name='loss'))
-
-      optimizer = tf.train.RMSPropOptimizer(conf.learning_rate)
-      grads_and_vars = optimizer.compute_gradients(self.loss)
-
-      new_grads_and_vars = \
-          [(tf.clip_by_value(gv[0], -conf.grad_clip, conf.grad_clip), gv[1]) for gv in grads_and_vars]
-      self.optim = optimizer.apply_gradients(new_grads_and_vars)
+      self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+          self.l['conv2d_out_logits'], self.l['normalized_inputs'], name='loss'))
     else:
+      COLOR_DIM = 256
+
+      self.l['conv2d_out_logits'] = conv2d(l_hid, COLOR_DIM, [1, 1], "B", scope='conv2d_out_logits')
+
+      self.l['conv2d_out_logits_flat'] = tf.reshape(
+          self.l['conv2d_out_logits'], [-1, self.height * self.width, COLOR_DIM])
+      self.l['normalized_inputs_flat'] = tf.reshape(
+          self.l['normalized_inputs'], [-1, self.height * self.width, COLOR_DIM])
+
+      pred_pixels = [tf.squeeze(pixel, squeeze_dims=[1])
+          for pixel in tf.split(1, self.height * self.width, self.l['conv2d_out_logits_flat'])]
+      target_pixels = [tf.squeeze(pixel, squeeze_dims=[1])
+          for pixel in tf.split(1, self.height * self.width, self.l['normalized_inputs_flat'])]
+
+      softmaxed_pixels = [tf.nn.softmax(pixel) for pixel in pred_pixels]
+
+      losses = [tf.nn.sampled_softmax_loss(
+          pred_pixel, tf.zeros_like(pred_pixel), pred_pixel, target_pixel, 1, COLOR_DIM) \
+              for pred_pixel, target_pixel in zip(pred_pixels, target_pixels)]
+
+      self.l['output'] = tf.nn.softmax(self.l['conv2d_out_logits'])
+
+      logger.info("Building loss and optims")
+      self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+          self.l['conv2d_out_logits'], self.l['normalized_inputs'], name='loss'))
+
       raise ValueError("Not implemented yet for RGB colors")
+
+    optimizer = tf.train.RMSPropOptimizer(conf.learning_rate)
+    grads_and_vars = optimizer.compute_gradients(self.loss)
+
+    new_grads_and_vars = \
+        [(tf.clip_by_value(gv[0], -conf.grad_clip, conf.grad_clip), gv[1]) for gv in grads_and_vars]
+    self.optim = optimizer.apply_gradients(new_grads_and_vars)
  
     show_all_variables()
 
