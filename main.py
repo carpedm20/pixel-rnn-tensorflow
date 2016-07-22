@@ -6,8 +6,8 @@ import numpy as np
 from tqdm import trange
 import tensorflow as tf
 
-from ops import *
 from utils import *
+from network import Network
 from statistic import Statistic
 
 flags = tf.app.flags
@@ -33,7 +33,7 @@ flags.DEFINE_boolean("use_gpu", True, "whether to use gpu for training")
 # data
 flags.DEFINE_string("data", "mnist", "name of dataset [mnist, cifar]")
 flags.DEFINE_string("data_dir", "data", "name of data directory")
-flags.DEFINE_string("sample_dir", "sample", "name of sample directory")
+flags.DEFINE_string("sample_dir", "samples", "name of sample directory")
 
 # Debug
 flags.DEFINE_boolean("is_train", True, "training or testing")
@@ -51,22 +51,19 @@ logger.setLevel(conf.log_level)
 tf.set_random_seed(conf.random_seed)
 np.random.seed(conf.random_seed)
 
-DATA_DIR = os.path.join(conf.data_dir, conf.data)
-SAMPLE_DIR = os.path.join(conf.data_dir, conf.data)
-
-check_and_create_dir(DATA_DIR)
-check_and_create_dir(SAMPLE_DIR)
-
 def main(_):
   model_dir = get_model_dir(conf, 
-      ['max_epoch', 'test_step', 'save_step', 'is_train', 'random_seed', 'log_level', 'display'])
+      ['data_dir', 'sample_dir', 'max_epoch', 'test_step', 'save_step',
+       'is_train', 'random_seed', 'log_level', 'display'])
   preprocess_conf(conf)
 
-  if conf.use_gpu:
-    data_format = "NHWC"
-  else:
-    data_format = "NCHW"
+  DATA_DIR = os.path.join(conf.data_dir, conf.data)
+  SAMPLE_DIR = os.path.join(conf.sample_dir, conf.data, model_dir)
 
+  check_and_create_dir(DATA_DIR)
+  check_and_create_dir(SAMPLE_DIR)
+
+  # 0. prepare datasets
   if conf.data == "mnist":
     from tensorflow.examples.tutorials.mnist import input_data
     mnist = input_data.read_data_sets(DATA_DIR, one_hot=True)
@@ -75,6 +72,9 @@ def main(_):
     next_test_batch = lambda x: mnist.test.next_batch(x)[0]
 
     height, width, channel = 28, 28, 1
+
+    train_step_per_epoch = mnist.train.num_examples / conf.batch_size
+    test_step_per_epoch = mnist.test.num_examples / conf.batch_size
   elif conf.data == "cifar":
     from cifar10 import IMAGE_SIZE, inputs
 
@@ -82,96 +82,11 @@ def main(_):
 
     height, width, channel = IMAGE_SIZE, IMAGE_SIZE, 3
 
-    import ipdb; ipdb.set_trace() 
-
-    train_step_per_epoch = mnist.train.num_examples / conf.batch_size
-    test_step_per_epoch = mnist.test.num_examples / conf.batch_size
-
   with tf.Session() as sess:
-    logger.info("Building %s starts!" % conf.model)
+    network = Network(sess, conf, height, width, channel)
 
-    if data_format == "NHWC":
-      input_shape = [None, height, width, channel]
-    elif data_format == "NCHW":
-      input_shape = [None, height, width, channel]
-    else:
-      raise ValueError("Unknown data_format: %s" % data_format)
-
-    l = {}
-
-    l['inputs'] = tf.placeholder(tf.float32, [None, height, width, channel],)
-
-    if conf.data =='mnist':
-      l['normalized_inputs'] = l['inputs']
-    else:
-      l['normalized_inputs'] = tf.div(l['inputs'], 255., name="normalized_inputs")
-
-    # input of main reccurent layers
-    scope = "conv_inputs"
-    logger.info("Building %s" % scope)
-
-    if conf.use_residual and conf.model == "pixel_rnn":
-      l[scope] = conv2d(l['normalized_inputs'], conf.hidden_dims * 2, [7, 7], "A", scope=scope)
-    else:
-      l[scope] = conv2d(l['normalized_inputs'], conf.hidden_dims, [7, 7], "A", scope=scope)
-    
-    # main reccurent layers
-    l_hid = l[scope]
-    for idx in xrange(conf.recurrent_length):
-      if conf.model == "pixel_rnn":
-        scope = 'LSTM%d' % idx
-        l[scope] = l_hid = diagonal_bilstm(l_hid, conf, scope=scope)
-      elif conf.model == "pixel_cnn":
-        scope = 'CONV%d' % idx
-        l[scope] = l_hid = conv2d(l_hid, 3, [1, 1], "B", scope=scope)
-      else:
-        raise ValueError("wrong type of model: %s" % (conf.model))
-      logger.info("Building %s" % scope)
-
-    # output reccurent layers
-    for idx in xrange(conf.out_recurrent_length):
-      scope = 'CONV_OUT%d' % idx
-      l[scope] = l_hid = tf.nn.relu(conv2d(l_hid, conf.out_hidden_dims, [1, 1], "B", scope=scope))
-      logger.info("Building %s" % scope)
-
-    if channel == 1:
-      l['conv2d_out_logits'] = conv2d(l_hid, 1, [1, 1], "B", scope='conv2d_out_logits')
-      l['output'] = tf.nn.sigmoid(l['conv2d_out_logits'])
-
-      logger.info("Building loss and optims")
-      loss = tf.reduce_mean(
-          tf.nn.sigmoid_cross_entropy_with_logits(l['conv2d_out_logits'], l['normalized_inputs'], name='loss'))
-
-      optimizer = tf.train.RMSPropOptimizer(conf.learning_rate)
-      grads_and_vars = optimizer.compute_gradients(loss)
-
-      new_grads_and_vars = \
-          [(tf.clip_by_value(gv[0], -conf.grad_clip, conf.grad_clip), gv[1]) for gv in grads_and_vars]
-      optim = optimizer.apply_gradients(new_grads_and_vars)
-    else:
-      raise ValueError("Not implemented yet for RGB colors")
-
-    logger.info("Building %s finished!" % conf.model)
-
-    show_all_variables()
     stat = Statistic(sess, conf.data, model_dir, tf.trainable_variables(), conf.test_step)
-
-    logger.info("Initializing all variables")
-
-    tf.initialize_all_variables().run()
     stat.load_model()
-
-    def generate():
-      samples = np.zeros((100, height, width, 1), dtype='float32')
-      for i in xrange(height):
-        for j in xrange(width):
-          for k in xrange(channel):
-            next_sample = binarize(l['output'].eval({l['inputs']: samples}))
-            samples[:, i, j, k] = next_sample[:, i, j, k]
-            if conf.data == 'mnist':
-              print "=" * (width/2), "(%2d, %2d)" % (i, j), "=" * (width/2)
-              mprint(next_sample[0,:,:,:])
-      return samples
 
     if conf.is_train:
       logger.info("Training starts!")
@@ -180,44 +95,41 @@ def main(_):
       iterator = trange(conf.max_epoch, ncols=70, initial=initial_step)
 
       for epoch in iterator:
+        # 1. train
         total_train_costs = []
         for idx in xrange(train_step_per_epoch):
           images = binarize(next_train_batch(conf.batch_size)) \
             .reshape([conf.batch_size, height, width, channel])
 
-          _, cost = sess.run([optim, loss], feed_dict={ l['inputs']: images })
+          cost = network.test(images, with_update=True)
           total_train_costs.append(cost)
         
+        # 2. test
         total_test_costs = []
         for idx in xrange(test_step_per_epoch):
           images = binarize(next_test_batch(conf.batch_size)) \
             .reshape([conf.batch_size, height, width, channel])
 
-          _, cost, output = sess.run([
-              optim, loss, l['output']
-            ], feed_dict={l['inputs']: images})
+          cost = network.test(images, with_update=False)
           total_test_costs.append(cost)
-
-          if conf.display:
-            print
-            print mprint(images[1])
-            print mprint(output[1], 0.5)
 
         avg_train_cost, avg_test_cost = np.mean(total_train_costs), np.mean(total_test_costs)
 
-        if stat:
-          stat.on_step(avg_train_cost, avg_test_cost)
+        stat.on_step(avg_train_cost, avg_test_cost)
 
-        samples = generate()
-        save_images(samples, height, width, 10, 10)
+        # 3. generate samples
+        samples = network.generate()
+        save_images(samples, height, width, 10, 10, 
+            directory=SAMPLE_DIR, prefix="epoch_%s" % idx)
 
         iterator.set_description("train l: %.3f, test l: %.3f" % (avg_train_cost, avg_test_cost))
         print
     else:
       logger.info("Image generation starts!")
 
-      samples = generate()
-      save_images(samples, height, width, 10, 10)
+      samples = network.generate()
+      save_images(samples, height, width, 10, 10, directory=SAMPLE_DIR)
+
 
 if __name__ == "__main__":
   tf.app.run()

@@ -59,9 +59,10 @@ class Statistic(object):
     self.saver.save(self.sess, self.model_dir, global_step=t)
 
   def load_model(self):
-    logger.info("Loading checkpoints...")
+    logger.info("Initializing all variables")
     tf.initialize_all_variables().run()
 
+    logger.info("Loading checkpoints...")
     ckpt = tf.train.get_checkpoint_state(self.model_dir)
     if ckpt and ckpt.model_checkpoint_path:
       ckpt_name = os.path.basename(ckpt.model_checkpoint_path)

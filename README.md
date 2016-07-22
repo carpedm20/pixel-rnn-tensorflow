@@ -41,7 +41,7 @@ To generate images with trained model:
 
 Below results uses two different parameters
 
-[1] `--hidden_dims=16 --recurrent_length=7 --out_hidden_dims=32`
+[1] `--hidden_dims=16 --recurrent_length=7 --out_hidden_dims=32`  
 [2] `--hidden_dims=64 --recurrent_length=2 --out_hidden_dims=64`
 
 Training results of `pixel_rnn` with [1] (yellow) and [2] (green) with `epoch` as x-axis:
