@@ -142,7 +142,17 @@ def main(_):
     tf.initialize_all_variables().run()
     stat.load_model()
 
-    G = tf.get_default_graph()
+    def generate():
+      samples = np.zeros((100, height, width, 1), dtype='float32')
+      for i in xrange(height):
+        for j in xrange(width):
+          for k in xrange(channel):
+            next_sample = binarize(l['output'].eval({l['inputs']: samples}))
+            samples[:, i, j, k] = next_sample[:, i, j, k]
+            if conf.data == 'mnist':
+              print "=" * (width/2), "(%2d, %2d)" % (i, j), "=" * (width/2)
+              mprint(next_sample[0,:,:,:])
+      return samples
 
     if conf.is_train:
       logger.info("Training starts!")
@@ -179,39 +189,16 @@ def main(_):
         if stat:
           stat.on_step(avg_train_cost, avg_test_cost)
 
+        samples = generate()
+        save_images(samples, height, width, 10, 10)
+
         iterator.set_description("train l: %.3f, test l: %.3f" % (avg_train_cost, avg_test_cost))
         print
     else:
       logger.info("Image generation starts!")
 
-      height_start = 14
-      images = binarize(next_test_batch(conf.batch_size)) \
-        .reshape([conf.batch_size, height, width, channel])
-
-      #images = np.ones_like(images)
-      #images[:,10:20,10:20,:] = 0
-
-      samples = images.copy()
-      samples[:,height_start:,:,:]=0
-
-      #samples = np.zeros((100, height, width, 1), dtype='float32')
-
-      #mprint(images[0,:,:,0])
-      #mprint(samples[0,:,:,0])
-      #mprint(l['output'].eval({l['inputs']: samples})[0,:,:,0])
-
-      for i in xrange(height_start, height):
-        for j in xrange(width):
-          for k in xrange(channel):
-            next_sample = binarize(l['output'].eval({l['inputs']: samples}))
-            samples[:, i, j, k] = next_sample[:, i, j, k]
-
-            if conf.data == 'mnist':
-              print "=" * width
-              #mprint(binarize(next_sample[0,:,:,:]))
-              mprint(binarize(samples[0,:,:,:]))
-
-      save_images(binarize(samples), height, width, 10, 10)
+      samples = generate()
+      save_images(samples, height, width, 10, 10)
 
 if __name__ == "__main__":
   tf.app.run()
