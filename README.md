@@ -7,10 +7,14 @@ TensorFlow implementation of [Pixel Recurrent Neural Networks](https://arxiv.org
 1. PixelCNN
   - Masked Convolution (A, B)
 2. PixelRNN
+  - Row LSTM (in progress)
   - Diagonal BiLSTM (skew, unskew)
   - Residual Connections
-
-*Model for natural images (with RGB colors) is in progress*
+  - Multi-Scale PixelRNN (in progress)
+3. Datasets
+  - MNIST
+  - cifar10 (in progress)
+  - ImageNet (in progress)
 
 
 ## Requirements
