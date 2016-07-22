@@ -71,6 +71,8 @@ class Network:
       self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
           self.l['conv2d_out_logits'], self.l['normalized_inputs'], name='loss'))
     else:
+      raise ValueError("Implementation in progress for RGB colors")
+
       COLOR_DIM = 256
 
       self.l['conv2d_out_logits'] = conv2d(l_hid, COLOR_DIM, [1, 1], "B", scope='conv2d_out_logits')
@@ -96,8 +98,6 @@ class Network:
       logger.info("Building loss and optims")
       self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
           self.l['conv2d_out_logits'], self.l['normalized_inputs'], name='loss'))
-
-      raise ValueError("Not implemented yet for RGB colors")
 
     optimizer = tf.train.RMSPropOptimizer(conf.learning_rate)
     grads_and_vars = optimizer.compute_gradients(self.loss)
