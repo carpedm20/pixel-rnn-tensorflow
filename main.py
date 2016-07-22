@@ -15,15 +15,15 @@ flags = tf.app.flags
 # network
 flags.DEFINE_string("model", "pixel_cnn", "name of model [pixel_rnn, pixel_cnn]")
 flags.DEFINE_integer("batch_size", 100, "size of a batch")
-flags.DEFINE_integer("hidden_dims", 64, "dimesion of hidden states of LSTM or Conv layers")
-flags.DEFINE_integer("recurrent_length", 2, "the length of LSTM or Conv layers")
-flags.DEFINE_integer("out_hidden_dims", 64, "dimesion of hidden states of output Conv layers")
+flags.DEFINE_integer("hidden_dims", 16, "dimesion of hidden states of LSTM or Conv layers")
+flags.DEFINE_integer("recurrent_length", 7, "the length of LSTM or Conv layers")
+flags.DEFINE_integer("out_hidden_dims", 32, "dimesion of hidden states of output Conv layers")
 flags.DEFINE_integer("out_recurrent_length", 2, "the length of output Conv layers")
 flags.DEFINE_boolean("use_residual", False, "whether to use residual connections or not")
 flags.DEFINE_boolean("use_dynamic_rnn", False, "whether to use dynamic_rnn or not")
 
 # training
-flags.DEFINE_float("max_step", 100000, "# of step in an epoch")
+flags.DEFINE_float("max_epoch", 100000, "# of step in an epoch")
 flags.DEFINE_float("test_step", 100, "# of step to test a model")
 flags.DEFINE_float("save_step", 1000, "# of step to save a model")
 flags.DEFINE_float("learning_rate", 1e-3, "learning rate")
@@ -37,6 +37,7 @@ flags.DEFINE_string("sample_dir", "sample", "name of sample directory")
 
 # Debug
 flags.DEFINE_boolean("is_train", True, "training or testing")
+flags.DEFINE_boolean("display", False, "whether to display the training results or not")
 flags.DEFINE_string("log_level", "INFO", "log level [DEBUG, INFO, WARNING, ERROR, CRITICAL]")
 flags.DEFINE_integer("random_seed", 123, "random seed for python")
 
@@ -58,7 +59,7 @@ check_and_create_dir(SAMPLE_DIR)
 
 def main(_):
   model_dir = get_model_dir(conf, 
-      ['max_step', 'test_step', 'save_step', 'is_train', 'random_seed', 'log_level'])
+      ['max_epoch', 'test_step', 'save_step', 'is_train', 'random_seed', 'log_level', 'display'])
   preprocess_conf(conf)
 
   if conf.use_gpu:
@@ -68,9 +69,10 @@ def main(_):
 
   if conf.data == "mnist":
     from tensorflow.examples.tutorials.mnist import input_data
-
     mnist = input_data.read_data_sets(DATA_DIR, one_hot=True)
-    next_batch = lambda x: mnist.train.next_batch(x)[0]
+
+    next_train_batch = lambda x: mnist.train.next_batch(x)[0]
+    next_test_batch = lambda x: mnist.test.next_batch(x)[0]
 
     height, width, channel = 28, 28, 1
   elif conf.data == "cifar":
@@ -81,6 +83,9 @@ def main(_):
     height, width, channel = IMAGE_SIZE, IMAGE_SIZE, 3
 
     import ipdb; ipdb.set_trace() 
+
+    train_step_per_epoch = mnist.train.num_examples / conf.batch_size
+    test_step_per_epoch = mnist.test.num_examples / conf.batch_size
 
   with tf.Session() as sess:
     logger.info("Building %s starts!" % conf.model)
@@ -156,46 +161,63 @@ def main(_):
     tf.initialize_all_variables().run()
     stat.load_model()
 
-    if conf.is_train:
-      logger.info("Training starts!")
-
-      initial_step = stat.get_t() if stat else 0
-      iterator = trange(conf.max_step, ncols=70, initial=initial_step)
-
-      for i in iterator:
-        if conf.data == 'mnist':
-          images = binarize(next_batch(conf.batch_size)) \
-            .reshape([conf.batch_size, height, width, channel])
-
-        _, cost, output = sess.run([
-            optim, loss, l['output']
-          ], feed_dict={l['inputs']: images})
-
-        if conf.data == 'mnist':
-          print
-          print mprint(images[1])
-          print mprint(output[1], 0.5)
-
-        if stat:
-          stat.on_step(cost)
-
-        iterator.set_description("l: %s" % cost)
-    else:
-      logger.info("Image generation starts!")
+    def generate():
       samples = np.zeros((100, height, width, 1), dtype='float32')
-
       for i in xrange(height):
         for j in xrange(width):
           for k in xrange(channel):
             next_sample = binarize(l['output'].eval({l['inputs']: samples}))
             samples[:, i, j, k] = next_sample[:, i, j, k]
-
             if conf.data == 'mnist':
-              mprint(binarize(samples[0,:,:,:]))
+              print "=" * (width/2), "(%2d, %2d)" % (i, j), "=" * (width/2)
+              mprint(next_sample[0,:,:,:])
+      return samples
 
-      save_images(samples, height, width, 10, 10, \
-          os.path.join(SAMPLE_DIR, "%s.jpg" % get_timestamp()))
+    if conf.is_train:
+      logger.info("Training starts!")
 
+      initial_step = stat.get_t() if stat else 0
+      iterator = trange(conf.max_epoch, ncols=70, initial=initial_step)
+
+      for epoch in iterator:
+        total_train_costs = []
+        for idx in xrange(train_step_per_epoch):
+          images = binarize(next_train_batch(conf.batch_size)) \
+            .reshape([conf.batch_size, height, width, channel])
+
+          _, cost = sess.run([optim, loss], feed_dict={ l['inputs']: images })
+          total_train_costs.append(cost)
+        
+        total_test_costs = []
+        for idx in xrange(test_step_per_epoch):
+          images = binarize(next_test_batch(conf.batch_size)) \
+            .reshape([conf.batch_size, height, width, channel])
+
+          _, cost, output = sess.run([
+              optim, loss, l['output']
+            ], feed_dict={l['inputs']: images})
+          total_test_costs.append(cost)
+
+          if conf.display:
+            print
+            print mprint(images[1])
+            print mprint(output[1], 0.5)
+
+        avg_train_cost, avg_test_cost = np.mean(total_train_costs), np.mean(total_test_costs)
+
+        if stat:
+          stat.on_step(avg_train_cost, avg_test_cost)
+
+        samples = generate()
+        save_images(samples, height, width, 10, 10)
+
+        iterator.set_description("train l: %.3f, test l: %.3f" % (avg_train_cost, avg_test_cost))
+        print
+    else:
+      logger.info("Image generation starts!")
+
+      samples = generate()
+      save_images(samples, height, width, 10, 10)
 
 if __name__ == "__main__":
   tf.app.run()

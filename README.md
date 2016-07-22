@@ -24,24 +24,38 @@ First, install prerequisites with:
 
     $ pip install tqdm gym[all]
 
-To train a `pixel_cnn` model with `mnist` data (very fast):
+To train a `pixel_rnn` model with `mnist` data (slow iteration, fast convergence):
 
-    $ python main.py --data=mnist --model=pixel_cnn --out_recurrent_length=3
+    $ python main.py --data=mnist --model=pixel_rnn
 
-To train a `pixel_rnn` model with `mnist` data (slow):
+To train a `pixel_cnn` model with `mnist` data (fast iteration, slow convergence):
 
-    $ python main.py --data=mnist --model=pixel_rnn --out_recurrent_length=3
+    $ python main.py --data=mnist --model=pixel_cnn --hidden_dims=64 --recurrent_length=2 --out_hidden_dims=64
 
 To generate images with trained model: 
 
-    $ python main.py --data=mnist --model=pixel_cnn --out_recurrent_length=3 --is_train=False
+    $ python main.py --data=mnist --model=pixel_rnn --is_train=False
 
 
 ## Results
 
-The current implementation of `pixel_rnn` is complicated so the training is slower than `pixel_cnn`.
+Below results uses two different parameters
 
-(in progress)
+[1] `--hidden_dims=16 --recurrent_length=7 --out_hidden_dims=32`
+[2] `--hidden_dims=64 --recurrent_length=2 --out_hidden_dims=64`
+
+Training results of `pixel_rnn` with [1] (yellow) and [2] (green) with `epoch` as x-axis:
+
+![pixel_rnn](./assets/pixel_rnn.png)
+
+Training results of `pixel_cnn` with [1] (orange) and [2] (purple) with `epoch` as x-axis:
+
+![pixel_cnn](./assets/pixel_cnn.png)
+
+Training results of `pixel_rnn` (yellow, green) and `pixel_cnn` (orange, purple) with `hour` as x-axis:
+
+![pixel_rnn_cnn_relative](./assets/pixel_rnn_cnn_relative.png)
+
 
 
 ## References

@@ -20,7 +20,7 @@ class Statistic(object):
     self.writer = tf.train.SummaryWriter('./logs/%s' % self.model_dir, self.sess.graph)
 
     with tf.variable_scope('summary'):
-      scalar_summary_tags = ['avg l']
+      scalar_summary_tags = ['train_l', 'test_l']
 
       self.summary_placeholders = {}
       self.summary_ops = {}
@@ -30,22 +30,15 @@ class Statistic(object):
         self.summary_ops[tag]  = tf.scalar_summary('%s/%s' % (data, tag), self.summary_placeholders[tag])
 
   def reset(self):
-    self.epoch_step = 0
-    self.total_l = 0
+    pass
 
-  def on_step(self, loss):
+  def on_step(self, train_l, test_l):
     self.t = self.t_add_op.eval(session=self.sess)
 
-    self.total_l += loss
-    self.epoch_step += 1
+    self.inject_summary({'train_l': train_l, 'test_l': test_l}, self.t)
 
-    if self.t % self.test_step == 0:
-      avg_l = self.total_l / self.epoch_step
-
-      self.inject_summary({'avg l': avg_l}, self.t)
-      self.save_model(self.t)
-
-      self.reset()
+    self.save_model(self.t)
+    self.reset()
 
   def get_t(self):
     return self.t_op.eval(session=self.sess)

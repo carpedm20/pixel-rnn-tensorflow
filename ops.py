@@ -83,6 +83,7 @@ def conv2d(
     biases_regularizer=None,
     scope="conv2d"):
   with tf.variable_scope(scope):
+    mask_type = mask_type.lower()
     batch_size, height, width, channel = inputs.get_shape().as_list()
 
     kernel_h, kernel_w = kernel_shape
@@ -105,11 +106,11 @@ def conv2d(
       mask[center_h, center_w+1: ,: ,:] = 0.
       mask[center_h+1:, :, :, :] = 0.
 
-      if mask_type.upper() == "A":
+      if mask_type == 'a':
         mask[center_h,center_w,:,:] = 0.
 
       weights *= tf.constant(mask, dtype=tf.float32)
-      tf.add_to_collection('conv2d_weights', weights)
+      tf.add_to_collection('conv2d_weights_%s' % mask_type, weights)
 
     outputs = tf.nn.conv2d(inputs,
         weights, [1, stride_h, stride_w, 1], padding=padding, name='outputs')

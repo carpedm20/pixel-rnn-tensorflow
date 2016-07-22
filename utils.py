@@ -36,12 +36,13 @@ def get_timestamp():
 def binarize(images):
   return (np.random.uniform(size=images.shape) < images).astype('float32')
 
-def save_images(images, height, width, n_row, n_col, cmin=0.0, cmax=1.0, filename="sample.jpg"):
-  images = images.reshape((height, width, n_row, n_col))
+def save_images(images, height, width, n_row, n_col, cmin=0.0, cmax=1.0, prefix="sample"):
+  images = images.reshape((n_row, n_col, height, width))
   images = images.transpose(1, 2, 0, 3)
   images = images.reshape((height * n_row, width * n_col))
 
-  scipy.misc.toimage(images, cmin=cmin, cmax=cmax).save(filename)
+  scipy.misc.toimage(images, cmin=cmin, cmax=cmax) \
+      .save('%s_%s.jpg' % (prefix, get_timestamp()))
 
 def get_model_dir(config, exceptions=None):
   attrs = config.__dict__['__flags']
