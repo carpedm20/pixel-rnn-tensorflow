@@ -41,18 +41,18 @@ To generate images with trained model:
 
 Below results uses two different parameters
 
-- [1] --hidden_dims=16 --recurrent_length=7 --out_hidden_dims=32
-- [2] --hidden_dims=64 --recurrent_length=2 --out_hidden_dims=64
+[1] `--hidden_dims=16 --recurrent_length=7 --out_hidden_dims=32`
+[2] `--hidden_dims=64 --recurrent_length=2 --out_hidden_dims=64`
 
-Training results of `pixel_rnn` with [1] (yellow) and [2] (green):
+Training results of `pixel_rnn` with [1] (yellow) and [2] (green) with `epoch` as x-axis:
 
 ![pixel_rnn](./assets/pixel_rnn.png)
 
-Training results of `pixel_cnn` with [1] (orange) and [2] (purple):
+Training results of `pixel_cnn` with [1] (orange) and [2] (purple) with `epoch` as x-axis:
 
 ![pixel_cnn](./assets/pixel_cnn.png)
 
-Training results of `pixel_rnn` and `pixel_cnn` with `hour` as x-axis:
+Training results of `pixel_rnn` (yellow, green) and `pixel_cnn` (orange, purple) with `hour` as x-axis:
 
 ![pixel_rnn_cnn_relative](./assets/pixel_rnn_cnn_relative.png)
 
