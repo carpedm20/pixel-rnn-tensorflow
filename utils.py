@@ -31,8 +31,8 @@ def binarize(images):
   return (np.random.uniform(size=images.shape) < images).astype('float32')
 
 def save_images(images, height, width, n_row, n_col, cmin=0.0, cmax=1.0):
-  images = images.reshape((height, width, n_row, n_col))
-  images = images.transpose(1, 2, 0, 3)
+  images = images.reshape((n_row, n_col, height, width))
+  images = images.transpose(1,2,0,3)
   images = images.reshape((height * n_row, width * n_col))
 
   scipy.misc.toimage(images, cmin=cmin, cmax=cmax).save('sample_%s.jpg' % get_timestamp())

@@ -1,7 +1,8 @@
 # misc
 logs
-MNIST_data
+data
 *.jpg
+MNIST_data
 
 # data
 samples
