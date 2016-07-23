@@ -74,8 +74,8 @@ Training results of `pixel_rnn` (yellow, green) and `pixel_cnn` (orange, purple)
 - [Pixel Recurrent Neural Networks](https://arxiv.org/abs/1601.06759)
 - [Conditional Image Generation with PixelCNN Decoders](https://arxiv.org/abs/1606.05328)
 - [Review by Kyle Kastner](https://github.com/tensorflow/magenta/blob/master/magenta/reviews/pixelrnn.md)
+- [igul222/pixel_rnn](https://github.com/igul222/pixel_rnn)
 - [kundan2510/pixelCNN](https://github.com/kundan2510/pixelCNN)
-- [zhirongw/pixel-rnn](https://github.com/zhirongw/pixel-rnn)
 
 
 ## Author
