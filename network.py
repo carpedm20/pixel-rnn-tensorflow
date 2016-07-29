@@ -22,7 +22,7 @@ class Network:
     if data_format == "NHWC":
       input_shape = [None, height, width, channel]
     elif data_format == "NCHW":
-      input_shape = [None, height, width, channel]
+      input_shape = [None, channel, height, width]
     else:
       raise ValueError("Unknown data_format: %s" % data_format)
 
