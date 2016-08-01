@@ -15,34 +15,31 @@ class Network:
     self.height, self.width, self.channel = height, width, channel
 
     if conf.use_gpu:
-      data_format = "NHWC"
+      conf.data_format = "NCHW"
     else:
-      data_format = "NCHW"
-
-    if data_format == "NHWC":
-      input_shape = [None, height, width, channel]
-    elif data_format == "NCHW":
-      input_shape = [None, channel, height, width]
-    else:
-      raise ValueError("Unknown data_format: %s" % data_format)
+      conf.data_format = "NHWC"
 
     self.l = {}
 
-    self.l['inputs'] = tf.placeholder(tf.float32, [None, height, width, channel],)
+    self.l['inputs'] = inputs = tf.placeholder(tf.float32, [None, height, width, channel],)
+    if conf.data_format == "NCHW":
+      inputs = tf.transpose(self.l['inputs'], [0, 3, 1, 2])
 
     if conf.data =='mnist':
-      self.l['normalized_inputs'] = self.l['inputs']
+      self.l['normalized_inputs'] = inputs
     else:
-      self.l['normalized_inputs'] = tf.div(self.l['inputs'], 255., name="normalized_inputs")
+      self.l['normalized_inputs'] = tf.div(inputs, 255., name="normalized_inputs")
 
     # input of main reccurent layers
     scope = "conv_inputs"
     logger.info("Building %s" % scope)
 
     if conf.use_residual and conf.model == "pixel_rnn":
-      self.l[scope] = conv2d(self.l['normalized_inputs'], conf.hidden_dims * 2, [7, 7], "A", scope=scope)
+      self.l[scope] = conv2d(self.l['normalized_inputs'],
+          conf.hidden_dims * 2, [7, 7], "A", conf.data_format, scope=scope)
     else:
-      self.l[scope] = conv2d(self.l['normalized_inputs'], conf.hidden_dims, [7, 7], "A", scope=scope)
+      self.l[scope] = conv2d(self.l['normalized_inputs'],
+          conf.hidden_dims, [7, 7], "A", conf.data_format, scope=scope)
     
     # main reccurent layers
     l_hid = self.l[scope]
@@ -52,7 +49,7 @@ class Network:
         self.l[scope] = l_hid = diagonal_bilstm(l_hid, conf, scope=scope)
       elif conf.model == "pixel_cnn":
         scope = 'CONV%d' % idx
-        self.l[scope] = l_hid = conv2d(l_hid, 3, [1, 1], "B", scope=scope)
+        self.l[scope] = l_hid = conv2d(l_hid, conf.hidden_dims, [3, 3], "B", conf.data_format, scope=scope)
       else:
         raise ValueError("wrong type of model: %s" % (conf.model))
       logger.info("Building %s" % scope)
@@ -60,12 +57,16 @@ class Network:
     # output reccurent layers
     for idx in xrange(conf.out_recurrent_length):
       scope = 'CONV_OUT%d' % idx
-      self.l[scope] = l_hid = tf.nn.relu(conv2d(l_hid, conf.out_hidden_dims, [1, 1], "B", scope=scope))
+      self.l[scope] = l_hid = tf.nn.relu(
+          conv2d(l_hid, conf.out_hidden_dims, [1, 1], "B", conf.data_format, scope=scope))
       logger.info("Building %s" % scope)
 
     if channel == 1:
-      self.l['conv2d_out_logits'] = conv2d(l_hid, 1, [1, 1], "B", scope='conv2d_out_logits')
+      self.l['conv2d_out_logits'] = conv2d(l_hid, 1, [1, 1], "B", conf.data_format, scope='conv2d_out_logits')
       self.l['output'] = tf.nn.sigmoid(self.l['conv2d_out_logits'])
+
+      if conf.data_format == "NCHW":
+        self.l['output'] = tf.transpose(self.l['output'], [0, 2, 3, 1])
 
       logger.info("Building loss and optims")
       self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
@@ -75,7 +76,8 @@ class Network:
 
       COLOR_DIM = 256
 
-      self.l['conv2d_out_logits'] = conv2d(l_hid, COLOR_DIM, [1, 1], "B", scope='conv2d_out_logits')
+      self.l['conv2d_out_logits'] = conv2d(l_hid,
+          COLOR_DIM, [1, 1], "B", conf.data_format, scope='conv2d_out_logits')
 
       self.l['conv2d_out_logits_flat'] = tf.reshape(
           self.l['conv2d_out_logits'], [-1, self.height * self.width, COLOR_DIM])
