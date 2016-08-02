@@ -45,7 +45,9 @@ To generate images with trained model:
 
 ## Samples
 
-(in progress)
+Samples generated with `pixel_cnn` after 50 epochs.
+
+![generation_2016_08_01_16_40_28.jpg](./assets/generation_2016_08_01_16_40_28.jpg)
 
 
 ## Training details
