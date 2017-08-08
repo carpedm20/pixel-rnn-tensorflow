@@ -23,9 +23,9 @@ flags.DEFINE_boolean("use_residual", False, "whether to use residual connections
 # flags.DEFINE_boolean("use_dynamic_rnn", False, "whether to use dynamic_rnn or not")
 
 # training
-flags.DEFINE_float("max_epoch", 100000, "# of step in an epoch")
-flags.DEFINE_float("test_step", 100, "# of step to test a model")
-flags.DEFINE_float("save_step", 1000, "# of step to save a model")
+flags.DEFINE_integer("max_epoch", 100000, "# of step in an epoch")
+flags.DEFINE_integer("test_step", 100, "# of step to test a model")
+flags.DEFINE_integer("save_step", 1000, "# of step to save a model")
 flags.DEFINE_float("learning_rate", 1e-3, "learning rate")
 flags.DEFINE_float("grad_clip", 1, "value of gradient to be used for clipping")
 flags.DEFINE_boolean("use_gpu", True, "whether to use gpu for training")
