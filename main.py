@@ -20,7 +20,7 @@ flags.DEFINE_integer("recurrent_length", 7, "the length of LSTM or Conv layers")
 flags.DEFINE_integer("out_hidden_dims", 32, "dimesion of hidden states of output Conv layers")
 flags.DEFINE_integer("out_recurrent_length", 2, "the length of output Conv layers")
 flags.DEFINE_boolean("use_residual", False, "whether to use residual connections or not")
-flags.DEFINE_boolean("use_dynamic_rnn", False, "whether to use dynamic_rnn or not")
+# flags.DEFINE_boolean("use_dynamic_rnn", False, "whether to use dynamic_rnn or not")
 
 # training
 flags.DEFINE_float("max_epoch", 100000, "# of step in an epoch")
@@ -52,7 +52,7 @@ tf.set_random_seed(conf.random_seed)
 np.random.seed(conf.random_seed)
 
 def main(_):
-  model_dir = get_model_dir(conf, 
+  model_dir = get_model_dir(conf,
       ['data_dir', 'sample_dir', 'max_epoch', 'test_step', 'save_step',
        'is_train', 'random_seed', 'log_level', 'display'])
   preprocess_conf(conf)
@@ -79,7 +79,7 @@ def main(_):
     from cifar10 import IMAGE_SIZE, inputs
 
     maybe_download_and_extract(DATA_DIR)
-    images, labels = inputs(eval_data=False, 
+    images, labels = inputs(eval_data=False,
         data_dir=os.path.join(DATA_DIR, 'cifar-10-batches-bin'), batch_size=conf.batch_size)
 
     height, width, channel = IMAGE_SIZE, IMAGE_SIZE, 3
@@ -105,7 +105,7 @@ def main(_):
 
           cost = network.test(images, with_update=True)
           total_train_costs.append(cost)
-        
+
         # 2. test
         total_test_costs = []
         for idx in xrange(test_step_per_epoch):
@@ -121,7 +121,7 @@ def main(_):
 
         # 3. generate samples
         samples = network.generate()
-        save_images(samples, height, width, 10, 10, 
+        save_images(samples, height, width, 10, 10,
             directory=SAMPLE_DIR, prefix="epoch_%s" % epoch)
 
         iterator.set_description("train l: %.3f, test l: %.3f" % (avg_train_cost, avg_test_cost))
