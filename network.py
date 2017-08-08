@@ -85,12 +85,16 @@ class Network:
       self.l['normalized_inputs_flat'] = tf.reshape(
           self.l['normalized_inputs'], [-1, self.height * self.width, COLOR_DIM])
 
-      pred_pixels = [tf.squeeze(pixel, squeeze_dims=[1])
+      # FIXED pre-1.0 # pred_pixels = [tf.squeeze(pixel, squeeze_dims=[1])
+      pred_pixels = [tf.squeeze(pixel, axis=[1])
           # FIXED pre-1.0 # for pixel in tf.split(1, self.height * self.width, self.l['conv2d_out_logits_flat'])]
-          for pixel in tf.split(self.l['conv2d_out_logits_flat'], self.height * self.width, 1)]
-      target_pixels = [tf.squeeze(pixel, squeeze_dims=[1])
+          # FIXED pre-1.0 # for pixel in tf.split(self.l['conv2d_out_logits_flat'], self.height * self.width, 1)]
+          for pixel in tf.split(axis=self.l['conv2d_out_logits_flat'], num_or_size_splits=self.height * self.width, value=1)]
+      # FIXED pre-1.0 # target_pixels = [tf.squeeze(pixel, squeeze_dims=[1])
+      target_pixels = [tf.squeeze(pixel, axis=[1])
           # FIXED pre-1.0 # for pixel in tf.split(1, self.height * self.width, self.l['normalized_inputs_flat'])]
-          for pixel in tf.split(self.l['normalized_inputs_flat'], self.height * self.width, 1)]
+          # FIXED pre-1.0 # for pixel in tf.split(self.l['normalized_inputs_flat'], self.height * self.width, 1)]
+          for pixel in tf.split(axis=self.l['normalized_inputs_flat'], num_or_size_splits=self.height * self.width, value=1)]
 
       softmaxed_pixels = [tf.nn.softmax(pixel) for pixel in pred_pixels]
 

@@ -83,7 +83,8 @@ def conv2d(
     activation_fn=None,
     weights_initializer=WEIGHT_INITIALIZER,
     weights_regularizer=None,
-    biases_initializer=tf.zeros_initializer,
+    # FIXED pre-1.0 # biases_initializer=tf.zeros_initializer,
+    biases_initializer=tf.zeros_initializer(),
     biases_regularizer=None,
     scope="conv2d"):
   with tf.variable_scope(scope):
@@ -142,7 +143,8 @@ def conv1d(
     activation_fn=None,
     weights_initializer=WEIGHT_INITIALIZER,
     weights_regularizer=None,
-    biases_initializer=tf.zeros_initializer,
+    # FIXED pre-1.0 # biases_initializer=tf.zeros_initializer,
+    biases_initializer=tf.zeros_initializer(),
     biases_regularizer=None,
     scope="conv1d"):
   with tf.variable_scope(scope):
@@ -231,7 +233,8 @@ def diagonal_lstm(inputs, conf, scope='diagonal_lstm'):
 
     tf.add_to_collection('rnn_inputs', rnn_inputs)
 
-    rnn_input_list = [tf.squeeze(rnn_input, squeeze_dims=[1])
+    # FIXED pre-1.0 # rnn_input_list = [tf.squeeze(rnn_input, squeeze_dims=[1])
+    rnn_input_list = [tf.squeeze(rnn_input, axis=[1])
         # FIXED pre-1.0 # for rnn_input in tf.split(split_dim=1, num_split=width, value=rnn_inputs)]
         for rnn_input in tf.split(rnn_inputs, width, 1)]
 
