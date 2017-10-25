@@ -43,7 +43,7 @@ class Network:
       self.l[scope] = conv2d(self.l['normalized_inputs'], conf.hidden_dims * 2, [7, 7], "A", scope=scope)
     else:
       self.l[scope] = conv2d(self.l['normalized_inputs'], conf.hidden_dims, [7, 7], "A", scope=scope)
-    
+
     # main reccurent layers
     l_hid = self.l[scope]
     for idx in xrange(conf.recurrent_length):
@@ -68,8 +68,11 @@ class Network:
       self.l['output'] = tf.nn.sigmoid(self.l['conv2d_out_logits'])
 
       logger.info("Building loss and optims")
+      # FIXED pre-1.0
+      # self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+      #     self.l['conv2d_out_logits'], self.l['normalized_inputs'], name='loss'))
       self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-          self.l['conv2d_out_logits'], self.l['normalized_inputs'], name='loss'))
+          logits=self.l['conv2d_out_logits'], labels=self.l['normalized_inputs'], name='loss'))
     else:
       raise ValueError("Implementation in progress for RGB colors")
 
@@ -82,10 +85,14 @@ class Network:
       self.l['normalized_inputs_flat'] = tf.reshape(
           self.l['normalized_inputs'], [-1, self.height * self.width, COLOR_DIM])
 
-      pred_pixels = [tf.squeeze(pixel, squeeze_dims=[1])
-          for pixel in tf.split(1, self.height * self.width, self.l['conv2d_out_logits_flat'])]
-      target_pixels = [tf.squeeze(pixel, squeeze_dims=[1])
-          for pixel in tf.split(1, self.height * self.width, self.l['normalized_inputs_flat'])]
+      # FIXED pre-1.0 # pred_pixels = [tf.squeeze(pixel, squeeze_dims=[1])
+      pred_pixels = [tf.squeeze(pixel, axis=[1])
+          # FIXED pre-1.0 # for pixel in tf.split(1, self.height * self.width, self.l['conv2d_out_logits_flat'])]
+          for pixel in tf.split(self.l['conv2d_out_logits_flat'], self.height * self.width, 1)]
+      # FIXED pre-1.0 # target_pixels = [tf.squeeze(pixel, squeeze_dims=[1])
+      target_pixels = [tf.squeeze(pixel, axis=[1])
+          # FIXED pre-1.0 # for pixel in tf.split(1, self.height * self.width, self.l['normalized_inputs_flat'])]
+          for pixel in tf.split(self.l['normalized_inputs_flat'], self.height * self.width, 1)]
 
       softmaxed_pixels = [tf.nn.softmax(pixel) for pixel in pred_pixels]
 
@@ -96,8 +103,11 @@ class Network:
       self.l['output'] = tf.nn.softmax(self.l['conv2d_out_logits'])
 
       logger.info("Building loss and optims")
+      # FIXED pre-1.0
+      # self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+      #     self.l['conv2d_out_logits'], self.l['normalized_inputs'], name='loss'))
       self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-          self.l['conv2d_out_logits'], self.l['normalized_inputs'], name='loss'))
+          logits=self.l['conv2d_out_logits'], labels=self.l['normalized_inputs'], name='loss'))
 
     optimizer = tf.train.RMSPropOptimizer(conf.learning_rate)
     grads_and_vars = optimizer.compute_gradients(self.loss)
@@ -105,7 +115,7 @@ class Network:
     new_grads_and_vars = \
         [(tf.clip_by_value(gv[0], -conf.grad_clip, conf.grad_clip), gv[1]) for gv in grads_and_vars]
     self.optim = optimizer.apply_gradients(new_grads_and_vars)
- 
+
     show_all_variables()
 
     logger.info("Building %s finished!" % conf.model)
